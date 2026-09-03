@@ -1,0 +1,26 @@
+name: Publish Neovim plugin
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "paperhere/nvim/**"
+      - ".github/workflows/publish-nvim.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish plugin-only branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          commit="$(git subtree split --prefix=paperhere/nvim)"
+          git push origin "$commit:refs/heads/nvim" --force

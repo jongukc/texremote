@@ -1,127 +1,135 @@
-# paperhere
+# Paperhere
 
-LaTeX editing with bidirectional SyncTeX: nvim on local or remote servers, Zathura PDF viewer locally.
+Paperhere gives terminal Neovim a VS Code-like LaTeX loop: automatic builds, a live GUI preview, and bidirectional SyncTeX—locally or through SSH—with one command.
 
-Automates sshfs mounting, zathura config, reverse SSH tunnels, and path translation into a single command.
+The preview is a small, local-only web application powered by a vendored PDF.js build. It refreshes when the PDF changes while preserving the current page and scroll position, and it supports Vim-style navigation. Remote projects stay remote: Paperhere deploys a cached agent, runs Neovim and SyncTeX on the server, and exposes the preview through an SSH local-forward. It does not use SSHFS or translate mounted paths.
 
 ## Install
 
 ```bash
 git clone git@github.com:jongukc/paperhere.git
-pip install -e ./paperhere
+python -m pip install -e ./paperhere
 ```
 
-## Usage
+Paperhere uses your existing Neovim configuration. VimTeX must be installed and available in that configuration; no permanent Paperhere-specific Neovim settings or environment variables are required.
 
-### Local mode
+## Use
 
-Edit LaTeX locally with synctex between nvim and zathura.
+Open a local project:
 
 ```bash
-paperhere local <project-dir> [--pdf <name>] [--build-cmd '<cmd>']
+paperhere open ~/code/paper --build-cmd make
 ```
 
-Launches zathura in the background and starts nvim with a named pipe. Forward search (`\lv` in vimtex) jumps to the PDF location; ctrl+click in zathura jumps back to the source.
-
-With `--build-cmd`, the project is automatically rebuilt whenever a `.tex` file is saved:
+Open a project over SSH:
 
 ```bash
-paperhere local ./myproject --build-cmd 'make -C paper'
+paperhere open server:~/code/paper --build-cmd make
 ```
 
-### Remote mode
-
-Edit LaTeX on a remote server with the PDF viewer running locally.
+Paperhere detects a top-level TeX root and uses the PDF with the same basename. Override either when a project has a different layout:
 
 ```bash
-paperhere remote <server> <remote-dir> [--pdf <name>] [--port <N>] [--build-cmd '<cmd>']
+paperhere open ./paper --tex manuscript/main.tex --pdf build/main.pdf
 ```
 
-This:
+When `--build-cmd` is supplied, Paperhere runs it at startup and after saves to `.tex`, `.bib`, `.sty`, or `.cls` files. Builds are serialized, so a save during compilation schedules one follow-up build instead of starting competing processes.
 
-1. Mounts the remote directory via sshfs
-2. Opens zathura locally with the mounted PDF
-3. Starts a TCP listener for forward search commands
-4. Opens a reverse SSH tunnel so the remote can reach the listener
-5. Deploys `~/bin/paperhere-forward` to the remote server
+Without `--build-cmd`, Paperhere starts VimTeX's continuous compiler (`:VimtexCompile!`), which normally uses latexmk. Use `--no-auto-build` to leave compilation entirely under your control. The PDF watcher still refreshes the browser whenever another tool updates the file.
 
-Then SSH into the server and start nvim:
+Useful options:
 
-```bash
-PAPERHERE_SESSION=1 PAPERHERE_BUILD_CMD='make -C paper' nvim --listen /tmp/nvim-<project>.pipe .
+```text
+--tex PATH          main TeX file
+--pdf PATH          PDF output
+--build-cmd CMD     custom build command
+--nvim PATH         Neovim executable (also supported for SSH targets)
+--port PORT         fixed local preview port
+--no-auto-build     do not start a compiler
+--no-browser        print the preview URL without opening it
 ```
 
-The `PAPERHERE_BUILD_CMD` env var is optional; when set, `.tex` file saves trigger the build automatically.
+## SyncTeX
 
-Forward search (nvim -> PDF) goes through the TCP tunnel. Inverse search (PDF -> nvim) goes through SSH.
+- Neovim to PDF: run `:VimtexView` (usually `<localleader>lv`). The browser jumps to and highlights the matching PDF position.
+- PDF to Neovim: Ctrl-click the rendered page. Neovim opens the matching source file and moves to the resolved line.
 
-### Stop
+The build must produce a `.synctex.gz` file next to the PDF. With latexmk this generally means enabling `-synctex=1`; custom build systems must pass the equivalent engine option.
 
-```bash
-paperhere stop [project]    # stop one or all sessions
-```
+## Browser navigation
 
-Kills zathura, tears down the SSH tunnel, unmounts sshfs, and removes temp files.
+The viewer keeps focus-friendly Zathura-style controls:
+
+| Key | Action |
+| --- | --- |
+| `j` / `k`, `h` / `l` | Scroll vertically or horizontally |
+| `J` / `K` | Next or previous PDF page |
+| `gg` / `G` | First or last page |
+| `Ctrl-d` / `Ctrl-u` | Half-page down or up |
+| `Ctrl-f` / `Ctrl-b` | Full-page down or up |
+| `+` / `-` | Zoom in or out |
+| `s` / `a` | Fit width or fit page |
+| `/`, `n` / `N` | Search text and move through matching pages |
+| `r` | Reload the PDF |
+| `?` / `Escape` | Open help or close an overlay |
+| Ctrl-click | Inverse SyncTeX |
 
 ## Requirements
 
-- Python >= 3.10 (stdlib only, no dependencies)
-- [nvim](https://neovim.io/) with the [vimtex](https://github.com/lervag/vimtex) plugin
-- [zathura](https://pwmt.org/projects/zathura/) (with synctex support)
-- sshfs and fusermount (remote mode)
-- ssh (remote mode)
-- netcat (`nc`) on the remote server (remote mode)
+Local projects need:
 
-## How it works
+- Python 3.10 or newer
+- Neovim with [VimTeX](https://github.com/lervag/vimtex)
+- `synctex`
+- a graphical web browser
+- a LaTeX build toolchain
 
+SSH projects need `ssh` and a browser locally. The remote host needs Python 3.10 or newer, Neovim with the user's normal configuration, `synctex`, and the LaTeX build toolchain. Neovim may be installed through an interactive shell setup; Paperhere discovers its absolute path before launching the non-interactive session.
+
+## Architecture
+
+```text
+local project                         SSH project
+
+Neovim ──HTTP──┐                     remote Neovim ──HTTP──┐
+               │                                          │
+        Paperhere agent                              remote agent
+        ├─ builds / watches PDF                      ├─ SyncTeX
+        ├─ runs SyncTeX                              └─ serves PDF/events
+        └─ serves PDF/events                               │
+               │                                    SSH local-forward
+               └────────── browser viewer ─────────────────┘
 ```
-Local machine                          Remote server
--------------------------------------------------
-zathura <-- sshfs mount                nvim --listen pipe
-  |                                      |
-  |--- inverse search (PDF click) ------>| (via ssh)
-  |                                      |
-  |<-- forward search (\lv) -------------| (paperhere-forward -> nc -> TCP tunnel)
-```
 
-The TCP listener on the local machine receives forward search commands over a reverse SSH tunnel. It translates remote paths to local mount paths and calls `zathura --synctex-forward`.
+The agent listens only on loopback and data endpoints require a random per-session token. On SSH launches, the current package is content-addressed and cached under `~/.cache/paperhere/bundles/` on the remote host. Runtime sockets live in a private temporary directory and the launcher removes the session processes when Neovim exits.
 
-Inverse search uses zathura's `synctex-editor-command`, which runs an SSH command to send `--remote-send` to the remote nvim pipe.
+## Neovim plugin distribution
 
-## VimTeX integration
-
-The vimtex plugin config below detects `PAPERHERE_SESSION` env var.
-When set, it routes forward search through `~/bin/paperhere-forward` (deployed automatically)
-instead of calling zathura directly.
+The plugin source lives in [`paperhere/nvim`](paperhere/nvim). The launcher always uses this nested runtime directly. A GitHub Action publishes that directory alone to the generated `nvim` branch, allowing lazy.nvim users to install only the plugin:
 
 ```lua
-return {
-    "lervag/vimtex",
-    lazy = false,
-    init = function()
-        vim.g.vimtex_syntax_enabled = 1
-
-        -- Use paperhere-forward for remote sessions, zathura directly for local
-        local forward = os.getenv("HOME") .. "/bin/paperhere-forward"
-        if vim.fn.filereadable(forward) == 1
-           and vim.fn.getenv("PAPERHERE_SESSION") ~= vim.NIL then
-            vim.g.vimtex_view_method = "general"
-            vim.g.vimtex_view_general_viewer = forward
-            vim.g.vimtex_view_general_options = "@line:@col:@tex @pdf"
-        else
-            vim.g.vimtex_view_method = "zathura"
-        end
-
-        -- Auto-rebuild on save when PAPERHERE_BUILD_CMD is set
-        local build_cmd = vim.fn.getenv("PAPERHERE_BUILD_CMD")
-        if build_cmd ~= vim.NIL then
-            vim.api.nvim_create_autocmd("BufWritePost", {
-                pattern = "*.tex",
-                callback = function()
-                    vim.fn.jobstart(build_cmd)
-                end,
-            })
-        end
-    end,
+{
+  "jongukc/paperhere",
+  branch = "nvim",
+  name = "paperhere.nvim",
+  lazy = false,
+  dependencies = { "lervag/vimtex" },
 }
 ```
+
+The `nvim` branch is generated and force-updated; do not edit it directly. See the [plugin README](paperhere/nvim/README.md) for local development configuration.
+
+## Legacy commands
+
+The original Zathura/SSHFS implementation remains temporarily available as `paperhere local`, `paperhere remote`, and `paperhere stop`. New work should use `paperhere open`; the legacy commands require Zathura, SSHFS, netcat, and the old manual VimTeX configuration.
+
+## Development
+
+Run the unit suite and syntax checks:
+
+```bash
+python -m unittest discover -v
+node --check paperhere/static/app.js
+```
+
+PDF.js is vendored under `paperhere/static/vendor`; its Apache 2.0 license is included alongside the distribution.
