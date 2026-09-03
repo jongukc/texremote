@@ -124,6 +124,17 @@ def _wait_for_server(url: str, timeout: float = 10) -> None:
     raise LaunchError(f"Preview server did not become ready: {error}")
 
 
+def _open_browser(url: str, browser: str | None = None) -> None:
+    try:
+        controller = webbrowser.get(browser) if browser else webbrowser
+        opened = controller.open(url)
+    except webbrowser.Error as exc:
+        raise LaunchError(f"Browser {browser!r} is unavailable: {exc}") from exc
+    if not opened:
+        selected = repr(browser) if browser else "the default browser"
+        raise LaunchError(f"Could not open {selected}")
+
+
 def _runtime_directory() -> Path:
     parent = Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp"))
     path = Path(tempfile.mkdtemp(prefix=f"paperhere-{os.getuid()}-", dir=parent))
@@ -540,7 +551,7 @@ def run_open(args) -> None:
         _wait_for_server(f"{server_url}/api/status?token={token}")
         print(f"Paperhere preview: {viewer_url}")
         if not args.no_browser:
-            webbrowser.open(viewer_url)
+            _open_browser(viewer_url, args.browser)
 
         if not args.no_editor:
             if target.remote:

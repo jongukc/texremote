@@ -17,6 +17,7 @@ def main() -> None:
     p_open.add_argument("--build-cmd", help="Build command; VimTeX/latexmk is used by default")
     p_open.add_argument("--nvim", help="Neovim executable (auto-detected, including remotely)")
     p_open.add_argument("--port", type=int, help="Local browser port (random if omitted)")
+    p_open.add_argument("--browser", help="Browser to open (e.g. firefox)")
     p_open.add_argument("--no-auto-build", action="store_true", help="Do not build on startup")
     p_open.add_argument("--no-browser", action="store_true", help="Print the preview URL only")
     p_open.add_argument("--no-editor", action="store_true", help=argparse.SUPPRESS)

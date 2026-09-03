@@ -33,6 +33,14 @@ Paperhere detects a top-level TeX root and uses the PDF with the same basename. 
 paperhere open ./paper --tex manuscript/main.tex --pdf build/main.pdf
 ```
 
+Choose a specific local browser with `--browser`:
+
+```bash
+paperhere open ./paper --browser firefox
+```
+
+This also applies to SSH projects: the selected browser runs locally, while the editor and preview agent remain on the remote host.
+
 When `--build-cmd` is supplied, Paperhere runs it at startup and after saves to `.tex`, `.bib`, `.sty`, or `.cls` files. Builds are serialized, so a save during compilation schedules one follow-up build instead of starting competing processes.
 
 Without `--build-cmd`, Paperhere starts VimTeX's continuous compiler (`:VimtexCompile!`), which normally uses latexmk. Use `--no-auto-build` to leave compilation entirely under your control. The PDF watcher still refreshes the browser whenever another tool updates the file.
@@ -45,6 +53,7 @@ Useful options:
 --build-cmd CMD     custom build command
 --nvim PATH         Neovim executable (also supported for SSH targets)
 --port PORT         fixed local preview port
+--browser NAME      browser to open, for example firefox
 --no-auto-build     do not start a compiler
 --no-browser        print the preview URL without opening it
 ```

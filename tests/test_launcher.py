@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import unittest
+import webbrowser
+from unittest.mock import Mock, patch
 
 from paperhere.launcher import (
     LaunchError,
     _agent_command,
     _editor_environment,
     _local_editor_command,
+    _open_browser,
     _resolve_remote,
     parse_target,
 )
@@ -85,6 +88,23 @@ class LauncherTests(unittest.TestCase):
                 "/work/p.tex",
             ],
         )
+
+    @patch("paperhere.launcher.webbrowser.get")
+    def test_opens_selected_browser(self, get_browser: Mock) -> None:
+        controller = get_browser.return_value
+        controller.open.return_value = True
+
+        _open_browser("http://127.0.0.1:8123", "firefox")
+
+        get_browser.assert_called_once_with("firefox")
+        controller.open.assert_called_once_with("http://127.0.0.1:8123")
+
+    @patch("paperhere.launcher.webbrowser.get")
+    def test_reports_unavailable_selected_browser(self, get_browser: Mock) -> None:
+        get_browser.side_effect = webbrowser.Error("could not locate runnable browser")
+
+        with self.assertRaisesRegex(LaunchError, "Browser 'missing' is unavailable"):
+            _open_browser("http://127.0.0.1:8123", "missing")
 
 
 if __name__ == "__main__":
