@@ -5,18 +5,30 @@ import sys
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="paperhere",
-        description="LaTeX editing with bidirectional synctex support on nvim and zathura",
+        description="Local and SSH Neovim LaTeX workflow with live browser preview",
     )
     sub = parser.add_subparsers(dest="command")
 
+    # open (browser-based local or remote workflow)
+    p_open = sub.add_parser("open", help="Open a local or SSH LaTeX project")
+    p_open.add_argument("target", help="Project directory or server:path")
+    p_open.add_argument("--tex", help="Main TeX file (auto-detected if omitted)")
+    p_open.add_argument("--pdf", help="PDF file (defaults to the main TeX basename)")
+    p_open.add_argument("--build-cmd", help="Build command; VimTeX/latexmk is used by default")
+    p_open.add_argument("--nvim", help="Neovim executable (auto-detected, including remotely)")
+    p_open.add_argument("--port", type=int, help="Local browser port (random if omitted)")
+    p_open.add_argument("--no-auto-build", action="store_true", help="Do not build on startup")
+    p_open.add_argument("--no-browser", action="store_true", help="Print the preview URL only")
+    p_open.add_argument("--no-editor", action="store_true", help=argparse.SUPPRESS)
+
     # local
-    p_local = sub.add_parser("local", help="Local LaTeX editing with zathura + nvim")
+    p_local = sub.add_parser("local", help="Legacy local Zathura workflow")
     p_local.add_argument("project_dir", help="Path to LaTeX project directory")
     p_local.add_argument("--pdf", help="PDF filename (auto-detected if omitted)")
     p_local.add_argument("--build-cmd", help="Build command to run on save (e.g. 'make -C paper')")
 
     # remote
-    p_remote = sub.add_parser("remote", help="Remote LaTeX editing via sshfs + tunnel")
+    p_remote = sub.add_parser("remote", help="Legacy remote SSHFS/Zathura workflow")
     p_remote.add_argument("server", help="SSH server (e.g. user@host)")
     p_remote.add_argument("remote_dir", help="Remote project directory path")
     p_remote.add_argument("--pdf", help="PDF filename (auto-detected if omitted)")
@@ -33,7 +45,10 @@ def main() -> None:
         parser.print_help()
         sys.exit(0)
 
-    if args.command == "local":
+    if args.command == "open":
+        from .launcher import run_open
+        run_open(args)
+    elif args.command == "local":
         from .local import run_local
         run_local(args)
     elif args.command == "remote":

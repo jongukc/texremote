@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Paperhere</title>
+    <link rel="stylesheet" href="/static/style.css">
+  </head>
+  <body>
+    <header id="toolbar">
+      <span class="brand">paperhere</span>
+      <button id="previous" title="Previous page (K)">&#8593;</button>
+      <label><input id="page-number" inputmode="numeric" value="1"> / <span id="page-count">0</span></label>
+      <button id="next" title="Next page (J)">&#8595;</button>
+      <span class="separator"></span>
+      <button id="zoom-out" title="Zoom out (-)">&#8722;</button>
+      <span id="zoom-label">100%</span>
+      <button id="zoom-in" title="Zoom in (+)">+</button>
+      <button id="fit-width" title="Fit width (s)">Width</button>
+      <button id="fit-page" title="Fit page (a)">Page</button>
+      <span class="spacer"></span>
+      <span id="status">Connecting&#8230;</span>
+      <button id="help-button" title="Keyboard help (?)">?</button>
+    </header>
+
+    <main id="viewer">
+      <section id="empty-state">
+        <div class="spinner"></div>
+        <h1>Waiting for the first build</h1>
+        <p>Paperhere will load the PDF after compilation succeeds.</p>
+      </section>
+    </main>
+
+    <section id="search-panel" class="floating hidden">
+      <label for="search-input">Search</label>
+      <input id="search-input" type="search" autocomplete="off" spellcheck="false">
+      <span id="search-status"></span>
+    </section>
+
+    <section id="help" class="floating hidden">
+      <h2>Keyboard navigation</h2>
+      <dl>
+        <dt>j / k</dt><dd>scroll down / up</dd>
+        <dt>h / l</dt><dd>scroll left / right</dd>
+        <dt>J / K</dt><dd>next / previous page</dd>
+        <dt>gg / G</dt><dd>first / last page</dd>
+        <dt>Ctrl-d / Ctrl-u</dt><dd>half page down / up</dd>
+        <dt>Ctrl-f / Ctrl-b</dt><dd>full page down / up</dd>
+        <dt>+ / -</dt><dd>zoom in / out</dd>
+        <dt>s / a</dt><dd>fit width / fit page</dd>
+        <dt>/</dt><dd>search text; n / N repeats</dd>
+        <dt>r</dt><dd>reload PDF</dd>
+        <dt>Ctrl-click</dt><dd>inverse SyncTeX</dd>
+        <dt>? / Escape</dt><dd>show help / close overlay</dd>
+      </dl>
+    </section>
+
+    <script type="module" src="/static/app.js"></script>
+  </body>
+</html>
