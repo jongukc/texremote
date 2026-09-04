@@ -14,6 +14,15 @@ function! s:viewer._exists() dict abort
   return v:true
 endfunction
 
+function! s:viewer.out() dict abort
+  if !empty($PAPERHERE_PDF)
+    return fnamemodify($PAPERHERE_PDF, ':p')
+  endif
+  return exists('*b:vimtex.compiler.get_file')
+        \ ? b:vimtex.compiler.get_file('pdf')
+        \ : ''
+endfunction
+
 function! s:notify_view(outfile) abort
   call luaeval("require('paperhere').view(_A)", {
         \ 'pdf': fnamemodify(a:outfile, ':p'),
