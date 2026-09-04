@@ -69,19 +69,19 @@ The build must produce a `.synctex.gz` file next to the PDF. With latexmk this g
 
 The viewer keeps focus-friendly Zathura-style controls:
 
-| Key | Action |
-| --- | --- |
-| `j` / `k`, `h` / `l` | Scroll vertically or horizontally |
-| `J` / `K` | Next or previous PDF page |
-| `gg` / `G` | First or last page |
-| `Ctrl-d` / `Ctrl-u` | Half-page down or up |
-| `Ctrl-f` / `Ctrl-b` | Full-page down or up |
-| `+` / `-` | Zoom in or out |
-| `s` / `a` | Fit width or fit page |
-| `/`, `n` / `N` | Search text and move through matching pages |
-| `r` | Reload the PDF |
-| `?` / `Escape` | Open help or close an overlay |
-| Ctrl-click | Inverse SyncTeX |
+| Key                  | Action                                      |
+| -------------------- | ------------------------------------------- |
+| `j` / `k`, `h` / `l` | Scroll vertically or horizontally           |
+| `J` / `K`            | Next or previous PDF page                   |
+| `gg` / `G`           | First or last page                          |
+| `Ctrl-d` / `Ctrl-u`  | Half-page down or up                        |
+| `Ctrl-f` / `Ctrl-b`  | Full-page down or up                        |
+| `+` / `-`            | Zoom in or out                              |
+| `s` / `a`            | Fit width or fit page                       |
+| `/`, `n` / `N`       | Search text and move through matching pages |
+| `r`                  | Reload the PDF                              |
+| `?` / `Escape`       | Open help or close an overlay               |
+| Ctrl-click           | Inverse SyncTeX                             |
 
 ## Requirements
 
@@ -101,7 +101,7 @@ SSH projects need `ssh` and a browser locally. The remote host needs Python 3.10
 local project                         SSH project
 
 Neovim ──HTTP──┐                     remote Neovim ──HTTP──┐
-               │                                          │
+               │                                           │
         Paperhere agent                              remote agent
         ├─ builds / watches PDF                      ├─ SyncTeX
         ├─ runs SyncTeX                              └─ serves PDF/events
