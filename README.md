@@ -128,10 +128,6 @@ The plugin source lives in [`paperhere/nvim`](paperhere/nvim). The launcher alwa
 
 The `nvim` branch is generated and force-updated; do not edit it directly. See the [plugin README](paperhere/nvim/README.md) for local development configuration.
 
-## Legacy commands
-
-The original Zathura/SSHFS implementation remains temporarily available as `paperhere local`, `paperhere remote`, and `paperhere stop`. New work should use `paperhere open`; the legacy commands require Zathura, SSHFS, netcat, and the old manual VimTeX configuration.
-
 ## Development
 
 Run the unit suite and syntax checks:
