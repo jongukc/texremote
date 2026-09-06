@@ -444,7 +444,10 @@ function overlaysOpen() {
 
 function closeOverlays() {
   help.classList.add("hidden");
-  searchPanel.classList.add("hidden");
+  if (!searchPanel.classList.contains("hidden")) {
+    searchPanel.classList.add("hidden");
+    clearSearch();
+  }
   searchInput.blur();
 }
 
