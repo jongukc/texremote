@@ -88,7 +88,24 @@ local function shell_command(command)
   return parts
 end
 
-local function start_custom_build()
+local start_custom_build
+
+local function finish_custom_build(result)
+  build_running = false
+  if result.code == 0 then
+    if configured_pdf and configured_pdf ~= "" then
+      M.build(configured_pdf)
+    end
+  else
+    local detail = vim.trim(result.stderr or result.stdout or "build failed")
+    report_error("build failed: " .. detail)
+  end
+  if build_pending then
+    start_custom_build()
+  end
+end
+
+start_custom_build = function()
   if not build_command or build_command == "" then
     return
   end
@@ -96,22 +113,26 @@ local function start_custom_build()
     build_pending = true
     return
   end
-  build_running = true
   build_pending = false
-  vim.system(shell_command(build_command), { cwd = root, text = true }, function(result)
-    build_running = false
-    if result.code == 0 then
-      if configured_pdf and configured_pdf ~= "" then
-        M.build(configured_pdf)
-      end
-    else
-      local detail = vim.trim(result.stderr or result.stdout or "build failed")
-      report_error("build failed: " .. detail)
-    end
-    if build_pending then
-      start_custom_build()
-    end
+  local ok, error_message = pcall(function()
+    -- Resolve the shell before marking the build as running: reading editor
+    -- options fails outside the main loop, and a failure here must not leave
+    -- the build flagged as running forever.
+    local command = shell_command(build_command)
+    build_running = true
+    vim.system(command, { cwd = root, text = true }, function(result)
+      -- The exit callback runs in a fast event context, where editor options
+      -- and most of the API are unavailable. Continue on the main loop so a
+      -- pending follow-up build can start.
+      vim.schedule(function()
+        finish_custom_build(result)
+      end)
+    end)
   end)
+  if not ok then
+    build_running = false
+    report_error("cannot start build: " .. tostring(error_message))
+  end
 end
 
 local function decode_hex(value)
