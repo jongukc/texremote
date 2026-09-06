@@ -78,9 +78,9 @@ The viewer keeps focus-friendly Zathura-style controls:
 | `Ctrl-f` / `Ctrl-b`  | Full-page down or up                        |
 | `+` / `-`            | Zoom in or out                              |
 | `s` / `a`            | Fit width or fit page                       |
-| `/`, `n` / `N`       | Search text and move through matching pages |
+| `/`, `n` / `N`       | Search text and move through highlighted matches |
 | `r`                  | Reload the PDF                              |
-| `?` / `Escape`       | Open help or close an overlay               |
+| `?` / `Escape`       | Open help, close an overlay, or clear search |
 | Ctrl-click           | Inverse SyncTeX                             |
 
 ## Requirements

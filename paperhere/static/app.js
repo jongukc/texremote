@@ -23,7 +23,11 @@ let renderGeneration = 0;
 let pendingForward = null;
 let searchResults = [];
 let searchIndex = -1;
+let searchActive = false;
+let searchGeneration = 0;
 let lastSearch = "";
+const pageViewports = new Map();
+const measureContext = document.createElement("canvas").getContext("2d");
 let pendingG = false;
 let pendingGTimer = null;
 
@@ -100,6 +104,7 @@ async function renderPage(pdf, number, generation) {
   canvas.addEventListener("click", inverseSearch);
   wrapper.append(canvas);
   viewer.append(wrapper);
+  pageViewports.set(number, viewport);
   const context = canvas.getContext("2d", { alpha: false });
   await page.render({
     canvasContext: context,
@@ -126,6 +131,7 @@ async function loadPdf(nextRevision = revision, preservePosition = true) {
     scale = await calculateScale(pdf);
     zoomLabel.textContent = `${Math.round(scale * 100)}%`;
     pageCount.textContent = String(pdf.numPages);
+    pageViewports.clear();
     viewer.replaceChildren();
     for (let number = 1; number <= pdf.numPages; number += 1) {
       await renderPage(pdf, number, generation);
@@ -135,6 +141,7 @@ async function loadPdf(nextRevision = revision, preservePosition = true) {
     updateCurrentPage();
     setStatus("Ready");
     if (pendingForward) showForward(pendingForward);
+    if (searchActive && lastSearch) void runSearch(lastSearch, { jump: false });
   } catch (error) {
     if (generation !== renderGeneration) return;
     const message = String(error?.message || error);
@@ -219,40 +226,220 @@ async function setScale(nextScale, mode = "manual") {
   if (documentHandle) await loadPdf(revision, true);
 }
 
-async function runSearch(query) {
-  if (!documentHandle || !query) return;
+function foldCharacter(character) {
+  const lower = character.toLowerCase();
+  return lower.length === 1 ? lower : character;
+}
+
+function normalizeQuery(query) {
+  let text = "";
+  for (const character of query) {
+    if (/\s/.test(character)) {
+      if (text && !text.endsWith(" ")) text += " ";
+    } else {
+      text += foldCharacter(character);
+    }
+  }
+  return text.trim();
+}
+
+function pageSearchText(items) {
+  const characters = [];
+  const origins = [];
+  const append = (character, origin) => {
+    characters.push(character);
+    origins.push(origin);
+  };
+  items.forEach((item, itemIndex) => {
+    for (let offset = 0; offset < item.str.length; offset += 1) {
+      const character = item.str[offset];
+      if (/\s/.test(character)) {
+        if (characters.length && characters.at(-1) !== " ") append(" ", null);
+      } else {
+        append(foldCharacter(character), { item: itemIndex, offset });
+      }
+    }
+    if (item.hasEOL && characters.length && characters.at(-1) !== " ") append(" ", null);
+  });
+  return { text: characters.join(""), origins };
+}
+
+function textWidth(text, fontFamily) {
+  measureContext.font = `100px ${fontFamily}`;
+  return measureContext.measureText(text).width;
+}
+
+function matchRectangle(item, style, start, end) {
+  const [a, b, c, d, e, f] = item.transform;
+  const unit = Math.hypot(a, b) || 1;
+  const family = style?.fontFamily || "sans-serif";
+  const total = textWidth(item.str, family) || 1;
+  const from = (textWidth(item.str.slice(0, start), family) / total) * (item.width / unit);
+  const to = (textWidth(item.str.slice(0, end), family) / total) * (item.width / unit);
+  const ascent = style?.ascent > 0 ? Math.min(style.ascent, 1.2) : 0.8;
+  const descent = style?.descent < 0 ? Math.max(style.descent, -0.5) : -0.2;
+  const corners = [[from, descent], [to, descent], [from, ascent], [to, ascent]]
+    .map(([u, v]) => [a * u + c * v + e, b * u + d * v + f]);
+  const xs = corners.map((point) => point[0]);
+  const ys = corners.map((point) => point[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+
+async function searchPage(pdf, number, needle) {
+  const page = await pdf.getPage(number);
+  const content = await page.getTextContent();
+  const items = content.items.filter((item) => typeof item.str === "string");
+  const { text, origins } = pageSearchText(items);
+  const matches = [];
+  let from = 0;
+  for (let start = text.indexOf(needle); start >= 0; start = text.indexOf(needle, from)) {
+    const end = start + needle.length;
+    from = end;
+    const ranges = new Map();
+    for (let index = start; index < end; index += 1) {
+      const origin = origins[index];
+      if (!origin) continue;
+      const range = ranges.get(origin.item);
+      if (range) {
+        range[0] = Math.min(range[0], origin.offset);
+        range[1] = Math.max(range[1], origin.offset);
+      } else {
+        ranges.set(origin.item, [origin.offset, origin.offset]);
+      }
+    }
+    const rects = [];
+    for (const [itemIndex, [first, last]] of ranges) {
+      const item = items[itemIndex];
+      rects.push(matchRectangle(item, content.styles[item.fontName], first, last + 1));
+    }
+    if (rects.length) matches.push({ page: number, rects });
+  }
+  return matches;
+}
+
+function clearSearchHighlights() {
+  for (const element of document.querySelectorAll(".search-highlight")) element.remove();
+}
+
+function markCurrentMatch() {
+  for (const element of document.querySelectorAll(".search-highlight")) {
+    element.classList.toggle("current", Number(element.dataset.match) === searchIndex);
+  }
+}
+
+function applySearchHighlights() {
+  clearSearchHighlights();
+  searchResults.forEach((match, index) => {
+    const page = document.querySelector(`.page[data-page="${match.page}"]`);
+    const viewport = pageViewports.get(match.page);
+    if (!page || !viewport) return;
+    for (const [x1, y1, x2, y2] of match.rects) {
+      const points = [[x1, y1], [x2, y1], [x1, y2], [x2, y2]]
+        .map(([x, y]) => viewport.convertToViewportPoint(x, y));
+      const left = Math.min(...points.map((point) => point[0]));
+      const top = Math.min(...points.map((point) => point[1]));
+      const right = Math.max(...points.map((point) => point[0]));
+      const bottom = Math.max(...points.map((point) => point[1]));
+      const marker = document.createElement("div");
+      marker.className = "search-highlight";
+      marker.dataset.match = String(index);
+      marker.style.left = `${left}px`;
+      marker.style.top = `${top}px`;
+      marker.style.width = `${Math.max(2, right - left)}px`;
+      marker.style.height = `${Math.max(2, bottom - top)}px`;
+      page.append(marker);
+    }
+  });
+  markCurrentMatch();
+}
+
+function selectMatch(index, scroll = true) {
+  const count = searchResults.length;
+  searchIndex = ((index % count) + count) % count;
+  markCurrentMatch();
+  const match = searchResults[searchIndex];
+  const label = `${searchIndex + 1}/${count}`;
+  searchStatus.textContent = label;
+  setStatus(`Match ${label}`);
+  if (!scroll) return;
+  const marker = document.querySelector(`.search-highlight[data-match="${searchIndex}"]`);
+  if (marker) marker.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+  else scrollToPage(match.page);
+  pageNumber.value = String(match.page);
+}
+
+function nearestMatch(direction) {
+  const page = currentPage();
+  if (direction < 0) {
+    for (let index = searchResults.length - 1; index >= 0; index -= 1) {
+      if (searchResults[index].page <= page) return index;
+    }
+    return searchResults.length - 1;
+  }
+  const index = searchResults.findIndex((match) => match.page >= page);
+  return index < 0 ? 0 : index;
+}
+
+async function runSearch(query, { jump = true, direction = 1 } = {}) {
+  const needle = normalizeQuery(query);
+  if (!documentHandle || !needle) return;
   lastSearch = query;
-  searchResults = [];
-  searchIndex = -1;
+  searchActive = true;
+  const generation = ++searchGeneration;
+  const pdf = documentHandle;
+  const previousIndex = searchIndex;
   searchStatus.textContent = "searching…";
-  const needle = query.toLocaleLowerCase();
-  for (let number = 1; number <= documentHandle.numPages; number += 1) {
-    const page = await documentHandle.getPage(number);
-    const content = await page.getTextContent();
-    const text = content.items.map((item) => item.str || "").join(" ").toLocaleLowerCase();
-    if (text.includes(needle)) searchResults.push(number);
+  const results = [];
+  for (let number = 1; number <= pdf.numPages; number += 1) {
+    let matches;
+    try {
+      matches = await searchPage(pdf, number, needle);
+    } catch (error) {
+      if (generation !== searchGeneration || pdf.loadingTask?.destroyed) return;
+      searchStatus.textContent = "error";
+      setStatus(String(error?.message || error), true);
+      return;
+    }
+    if (generation !== searchGeneration) return;
+    results.push(...matches);
   }
-  searchStatus.textContent = `${searchResults.length} pages`;
-  if (searchResults.length) {
-    searchIndex = 0;
-    scrollToPage(searchResults[0]);
+  searchResults = results;
+  searchIndex = -1;
+  applySearchHighlights();
+  if (!results.length) {
+    searchStatus.textContent = "no matches";
+    setStatus(`No matches for "${query}"`);
+    return;
   }
+  if (jump) selectMatch(nearestMatch(direction));
+  else selectMatch(Math.min(Math.max(previousIndex, 0), results.length - 1), false);
 }
 
 function repeatSearch(direction) {
   if (!searchResults.length) {
-    if (lastSearch) void runSearch(lastSearch);
+    if (lastSearch) void runSearch(lastSearch, { direction });
     return;
   }
-  searchIndex = (searchIndex + direction + searchResults.length) % searchResults.length;
-  scrollToPage(searchResults[searchIndex]);
-  searchStatus.textContent = `${searchIndex + 1}/${searchResults.length}`;
+  selectMatch(searchIndex + direction);
+}
+
+function clearSearch() {
+  searchActive = false;
+  searchResults = [];
+  searchIndex = -1;
+  searchGeneration += 1;
+  clearSearchHighlights();
+  searchStatus.textContent = "";
 }
 
 function openSearch() {
   searchPanel.classList.remove("hidden");
   searchInput.focus();
   searchInput.select();
+}
+
+function overlaysOpen() {
+  return !help.classList.contains("hidden") || !searchPanel.classList.contains("hidden");
 }
 
 function closeOverlays() {
@@ -303,7 +490,10 @@ function handleKey(event) {
   else if (event.key === "n") repeatSearch(1);
   else if (event.key === "N") repeatSearch(-1);
   else if (event.key === "?") help.classList.toggle("hidden");
-  else if (event.key === "Escape") closeOverlays();
+  else if (event.key === "Escape") {
+    if (overlaysOpen()) closeOverlays();
+    else clearSearch();
+  }
   else handled = false;
   if (handled) event.preventDefault();
 }
