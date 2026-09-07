@@ -21,6 +21,7 @@ let scale = 1.25;
 let scaleMode = "width";
 let renderGeneration = 0;
 let pendingForward = null;
+let loading = false;
 let searchResults = [];
 let searchIndex = -1;
 let searchActive = false;
@@ -117,6 +118,7 @@ async function loadPdf(nextRevision = revision, preservePosition = true) {
   const generation = ++renderGeneration;
   const anchor = preservePosition ? captureAnchor() : { page: 1, ratio: 0 };
   revision = nextRevision;
+  loading = true;
   setStatus("Loading PDF…");
   try {
     if (loadingTask) await loadingTask.destroy();
@@ -140,10 +142,12 @@ async function loadPdf(nextRevision = revision, preservePosition = true) {
     restoreAnchor(anchor);
     updateCurrentPage();
     setStatus("Ready");
+    loading = false;
     if (pendingForward) showForward(pendingForward);
     if (searchActive && lastSearch) void runSearch(lastSearch, { jump: false });
   } catch (error) {
     if (generation !== renderGeneration) return;
+    loading = false;
     const message = String(error?.message || error);
     if (message.includes("404") || message.includes("Missing PDF")) {
       showWaiting();
@@ -174,8 +178,11 @@ function scrollToPage(number, behavior = "smooth") {
 }
 
 function showForward(position) {
-  pendingForward = position;
   const page = document.querySelector(`.page[data-page="${position.page}"]`);
+  // Keep the request only until the document has finished rendering, so a
+  // jump requested during a load still happens. Later reloads restore the
+  // reading position instead of replaying the last forward search.
+  pendingForward = !page || loading ? position : null;
   if (!page) return;
   document.querySelector(".synctex-highlight")?.remove();
   const pageScale = Number(page.dataset.scale);
