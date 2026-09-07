@@ -169,7 +169,7 @@ function showWaiting() {
   setStatus("Waiting for PDF");
 }
 
-function scrollToPage(number, behavior = "smooth") {
+function scrollToPage(number, behavior = "instant") {
   if (!documentHandle) return;
   const bounded = Math.max(1, Math.min(documentHandle.numPages, Number(number) || 1));
   const page = document.querySelector(`.page[data-page="${bounded}"]`);
